@@ -1,3 +1,5 @@
 node_modules/
+**/node_modules/
+api/.env
 .env
 npm-debug.log*
