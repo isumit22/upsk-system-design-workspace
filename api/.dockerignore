@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+coverage
+dist
+artifacts
+generated
+progress
+report.json
+report3.json
+status.json

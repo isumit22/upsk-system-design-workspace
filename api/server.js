@@ -36,7 +36,17 @@ function isValidUrl(input) {
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
+app.get("/live", (req, res) => {
+  res.status(200).json({
+    status: "ok"
+  });
+});
 
+app.get("/ready", (req, res) => {
+  res.status(200).json({
+    status: "ok"
+  });
+});
 app.post("/links", (req, res) => {
   const { long_url, expires_at, tags } = req.body;
 
