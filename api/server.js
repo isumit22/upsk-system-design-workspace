@@ -4,6 +4,7 @@ const { randomUUID } = require("crypto");
 const cors = require("cors");
 const pinoHttp = require("pino-http");
 const client = require("prom-client");
+const CircuitBreaker = require("opossum");
 
 const config = require("./config");
 const logger = require("./logger");
@@ -95,8 +96,141 @@ app.get("/metrics", async (req, res) => {
   res.end(await client.register.metrics());
 });
 
+// -----------------------------
+// In-memory Storage
+// -----------------------------
 const links = [];
 
+// -----------------------------
+// Simulated External Dependency
+// -----------------------------
+async function simulatedStorage(link) {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => {
+      const err = new Error("Dependency timeout");
+      err.code = "ETIMEDOUT";
+      reject(err);
+    }, 1000)
+  );
+
+  const operationPromise = new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (Math.random() < 0.3) {
+        const err = new Error("Storage unavailable");
+        err.code = "ECONNRESET";
+        return reject(err);
+      }
+
+      links.push(link);
+      resolve(link);
+    }, 100);
+  });
+
+  return Promise.race([operationPromise, timeoutPromise]);
+}
+
+// -----------------------------
+// Retry with Exponential Backoff
+// -----------------------------
+async function retryWithBackoff(fn, options = {}) {
+  const {
+    maxRetries = 3,
+    baseDelay = 100,
+    maxDelay = 2000,
+    jitter = 50,
+    retryableErrors = [
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ECONNREFUSED",
+    ],
+  } = options;
+
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      if (!retryableErrors.includes(error.code)) {
+        throw error;
+      }
+
+      if (attempt === maxRetries) break;
+
+      const exponentialDelay = Math.min(
+        baseDelay * Math.pow(2, attempt),
+        maxDelay
+      );
+
+      const jitterOffset =
+        Math.floor(Math.random() * jitter * 2) - jitter;
+
+      const delay = Math.max(
+        0,
+        exponentialDelay + jitterOffset
+      );
+
+      logger.warn({
+        event: "retry_attempt",
+        attempt: attempt + 1,
+        delay_ms: delay,
+        error: error.message,
+      });
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay)
+      );
+    }
+  }
+
+  throw lastError;
+}
+
+// -----------------------------
+// Circuit Breaker
+// -----------------------------
+const breaker = new CircuitBreaker(simulatedStorage, {
+  timeout: 1000,
+  errorThresholdPercentage: 50,
+  resetTimeout: 30000,
+  volumeThreshold: 5,
+});
+
+breaker.fallback((link) => {
+  logger.warn({
+    event: "circuit_open_fallback",
+  });
+
+  return {
+    ...link,
+    degraded: true,
+    source: "fallback",
+  };
+});
+
+breaker.on("open", () =>
+  logger.error({
+    event: "circuit_opened",
+  })
+);
+
+breaker.on("halfOpen", () =>
+  logger.info({
+    event: "circuit_half_open",
+  })
+);
+
+breaker.on("close", () =>
+  logger.info({
+    event: "circuit_closed",
+  })
+);
+
+// -----------------------------
+// URL Validation
+// -----------------------------
 function isValidUrl(input) {
   if (typeof input !== "string") return false;
 
@@ -143,7 +277,7 @@ app.get("/ready", (req, res) => {
 // -----------------------------
 // Create Link
 // -----------------------------
-app.post("/links", (req, res) => {
+app.post("/links", async (req, res) => {
   const { long_url, expires_at, tags } = req.body;
 
   if (!isValidUrl(long_url)) {
@@ -185,15 +319,29 @@ app.post("/links", (req, res) => {
     short_url: `http://localhost:${PORT}/r/${code}`,
   };
 
-  links.push(link);
+  try {
+    const result = await retryWithBackoff(() =>
+      breaker.fire(link)
+    );
 
-  logger.info({
-    request_id: req.id,
-    message: "Short link created",
-    code,
-  });
+    logger.info({
+      request_id: req.id,
+      message: "Short link created",
+      code,
+    });
 
-  res.status(201).json(link);
+    return res.status(201).json(result);
+  } catch (err) {
+    logger.error({
+      event: "dependency_failure",
+      dependency: "storage",
+      error: err.message,
+    });
+
+    return res.status(503).json({
+      error: "Storage temporarily unavailable",
+    });
+  }
 });
 
 // -----------------------------
