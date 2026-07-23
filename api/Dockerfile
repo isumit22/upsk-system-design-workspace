@@ -16,6 +16,8 @@ WORKDIR /app
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/config.js ./config.js
+COPY --from=builder /app/logger.js ./logger.js
 COPY --from=builder /app/prisma ./prisma
 
 RUN groupadd -r appgroup && \
