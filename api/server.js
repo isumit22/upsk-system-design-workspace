@@ -269,8 +269,17 @@ app.get("/live", (req, res) => {
 });
 
 app.get("/ready", (req, res) => {
-  res.status(200).json({
-    status: "ok",
+  const checks = {
+    storage:
+      breaker.opened ? "degraded" : "connected",
+    uptime_seconds: Math.floor(process.uptime()),
+  };
+
+  const ready = !breaker.opened;
+
+  res.status(ready ? 200 : 503).json({
+    ok: ready,
+    checks,
   });
 });
 
