@@ -157,3 +157,5 @@ This repository includes progress and audit outputs used by the UPSK flow:
 - `api/artifacts/`
 
 These files are useful for tracking module outcomes and reasoning history.
+
+## Image representation
