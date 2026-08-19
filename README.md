@@ -1,5 +1,5 @@
 # upsk-system-design-workspace
-
+![System Design Workspace](./System_design.png)
 This repository contains a Node.js API workspace used in an UPSK system design learning flow. The main runnable component is an Express service in the `api` folder, with supporting progress artifacts generated during guided modules.
 
 ## What this project includes
@@ -157,7 +157,3 @@ This repository includes progress and audit outputs used by the UPSK flow:
 - `api/artifacts/`
 
 These files are useful for tracking module outcomes and reasoning history.
-
-## Image representation
-
-./ChatGPT%20Image%20Aug%2019,%202026,%2003_20_19%20PM.png
