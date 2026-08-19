@@ -159,3 +159,5 @@ This repository includes progress and audit outputs used by the UPSK flow:
 These files are useful for tracking module outcomes and reasoning history.
 
 ## Image representation
+
+(./ChatGPT%20Image%20Aug%2019,%202026,%2003_20_19%20PM.png)
